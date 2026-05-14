@@ -36,7 +36,7 @@ public class AddUserScreen extends JDialog {
         JTextField txtPassword = addField(panel, "Password");
         JTextField txtPhone    = addField(panel, "Phone Number");
 
-        panel.add(Box.createVerticalStrut(16));
+        panel.add(Box.createVerticalStrut(18));
 
         JButton btnSave = new JButton("Create Account");
         btnSave.setFont(new Font("Segoe UI", Font.BOLD, 13));
@@ -96,7 +96,7 @@ public class AddUserScreen extends JDialog {
         f.setMaximumSize(new Dimension(Integer.MAX_VALUE, 38));
         f.setAlignmentX(LEFT_ALIGNMENT);
         panel.add(f);
-        panel.add(Box.createVerticalStrut(8));
+        panel.add(Box.createVerticalStrut(10));
         return f;
     }
 }

@@ -1,22 +1,8 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <module type="JAVA_MODULE" version="4">
-  <component name="NewModuleRootManager" inherit-compiler-output="true">
-    <exclude-output />
-    <content url="file://$MODULE_DIR$">
+  <component name="AdditionalModuleElements">
+    <content url="file://$MODULE_DIR$" dumb="true">
       <sourceFolder url="file://$MODULE_DIR$/src" isTestSource="false" />
     </content>
-    <orderEntry type="inheritedJdk" />
-    <orderEntry type="sourceFolder" forTests="false" />
-    <orderEntry type="library" name="mysql-connector-j-9.7.0" level="project" />
-    <orderEntry type="library" name="opencv-4130" level="project" />
-    <orderEntry type="library" name="flatlaf-3.7.1" level="project" />
-    <orderEntry type="library" name="jna-5.13.0" level="project" />
-    <orderEntry type="library" name="jna-platform-5.13.0" level="project" />
-    <orderEntry type="library" name="jul-to-slf4j-2.0.9" level="project" />
-    <orderEntry type="library" name="slf4j-api-2.0.9" level="project" />
-    <orderEntry type="library" name="jai-imageio-core-1.4.0" level="project" />
-    <orderEntry type="library" name="tess4j-5.11.0" level="project" />
-    <orderEntry type="library" name="lept4j-1.23.0" level="project" />
-    <orderEntry type="library" name="commons-io-2.15.1" level="project" />
   </component>
 </module>
