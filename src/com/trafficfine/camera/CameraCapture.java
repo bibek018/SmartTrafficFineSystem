@@ -1,208 +1,440 @@
-package com.trafficfine.camera;
+    package com.trafficfine.camera;
 
-import com.sun.jna.NativeLibrary;
-import net.sourceforge.tess4j.Tesseract;
-import net.sourceforge.tess4j.TesseractException;
-import org.opencv.core.*;
-import org.opencv.imgcodecs.Imgcodecs;
-import org.opencv.imgproc.Imgproc;
-import org.opencv.objdetect.CascadeClassifier;
-import org.opencv.videoio.VideoCapture;
+    import com.sun.jna.NativeLibrary;
+    import net.sourceforge.tess4j.Tesseract;
+    import net.sourceforge.tess4j.TesseractException;
+    import org.opencv.core.*;
+    import org.opencv.imgcodecs.Imgcodecs;
+    import org.opencv.imgproc.Imgproc;
+    import org.opencv.objdetect.CascadeClassifier;
+    import org.opencv.videoio.VideoCapture;
 
-import java.awt.image.BufferedImage;
-import java.awt.image.DataBufferByte;
-import java.io.File;
-import java.text.SimpleDateFormat;
-import java.util.ArrayList;
-import java.util.Date;
-import java.util.List;
+    import java.awt.image.BufferedImage;
+    import java.awt.image.DataBufferByte;
+    import java.io.File;
+    import java.text.SimpleDateFormat;
+    import java.util.ArrayList;
+    import java.util.Date;
+    import java.util.List;
 
-public class CameraCapture {
+    public class CameraCapture {
 
-    private static final String OPENCV_DLL =
-            "C:\\Users\\ojhab\\Downloads\\opencv\\build\\java\\x64\\opencv_java4130.dll";
+        private static final String OPENCV_DLL =
+                "C:\\Users\\ojhab\\Downloads\\opencv\\build\\java\\x64\\opencv_java4130.dll";
 
-    private static final String TESS_PATH =
-            "C:\\Program Files\\Tesseract-OCR";
+        private static final String TESS_PATH =
+                "C:\\Program Files\\Tesseract-OCR";
 
-    private static final String TESSDATA_PATH =
-            "C:\\Program Files\\Tesseract-OCR\\tessdata";
+        private static final String TESSDATA_PATH =
+                "C:\\Program Files\\Tesseract-OCR\\tessdata";
 
-    static {
+        static {
 
-        try {
+            try {
 
-            System.load(OPENCV_DLL);
+                System.load(OPENCV_DLL);
 
-            System.out.println(
-                    "OpenCV loaded OK from: "
-                            + OPENCV_DLL
-            );
+                System.out.println(
+                        "OpenCV loaded OK from: "
+                                + OPENCV_DLL
+                );
 
-        } catch (UnsatisfiedLinkError e) {
+            } catch (UnsatisfiedLinkError e) {
 
-            System.err.println(
-                    "OpenCV load FAILED: "
-                            + e.getMessage()
-            );
+                System.err.println(
+                        "OpenCV load FAILED: "
+                                + e.getMessage()
+                );
+            }
+
+            try {
+
+                NativeLibrary.addSearchPath(
+                        "tesseract-5",
+                        TESS_PATH
+                );
+
+                NativeLibrary.addSearchPath(
+                        "tesseract50",
+                        TESS_PATH
+                );
+
+                NativeLibrary.addSearchPath(
+                        "leptonica-6",
+                        TESS_PATH
+                );
+
+                System.setProperty(
+                        "jna.library.path",
+                        TESS_PATH
+                );
+
+                System.out.println(
+                        "Tesseract path set: "
+                                + TESS_PATH
+                );
+
+            } catch (Exception e) {
+
+                System.err.println(
+                        "Tesseract path error: "
+                                + e.getMessage()
+                );
+            }
         }
 
-        try {
+        private VideoCapture camera;
 
-            NativeLibrary.addSearchPath(
-                    "tesseract-5",
-                    TESS_PATH
-            );
+        private CascadeClassifier plateDetector;
 
-            NativeLibrary.addSearchPath(
-                    "tesseract50",
-                    TESS_PATH
-            );
+        private Tesseract tesseract;
 
-            NativeLibrary.addSearchPath(
-                    "leptonica-6",
-                    TESS_PATH
-            );
+        private boolean cameraOpen = false;
 
-            System.setProperty(
-                    "jna.library.path",
-                    TESS_PATH
-            );
+        private List<Rect> lastDetectedPlates =
+                new ArrayList<>();
 
-            System.out.println(
-                    "Tesseract path set: "
-                            + TESS_PATH
-            );
+        private Mat lastRawFrame = new Mat();
 
-        } catch (Exception e) {
+        public CameraCapture() {
 
-            System.err.println(
-                    "Tesseract path error: "
-                            + e.getMessage()
-            );
-        }
-    }
+            plateDetector = new CascadeClassifier();
 
-    private VideoCapture camera;
-    private CascadeClassifier plateDetector;
-    private Tesseract tesseract;
+            if (!plateDetector.load(
+                    "haarcascade_russian_plate_number.xml"
+            )) {
 
-    private boolean cameraOpen = false;
+                System.err.println(
+                        "WARNING: Plate cascade XML not found."
+                );
 
-    private List<Rect> lastDetectedPlates =
-            new ArrayList<>();
+                plateDetector = null;
+            }
 
-    private Mat lastRawFrame = new Mat();
+            try {
 
-    public CameraCapture() {
+                tesseract = new Tesseract();
 
-        plateDetector = new CascadeClassifier();
+                tesseract.setDatapath(TESSDATA_PATH);
 
-        if (!plateDetector.load(
-                "haarcascade_russian_plate_number.xml"
-        )) {
+                tesseract.setLanguage("eng");
 
-            System.err.println(
-                    "WARNING: Plate cascade XML not found."
-            );
+                tesseract.setPageSegMode(7);
 
-            plateDetector = null;
+                tesseract.setOcrEngineMode(1);
+
+                tesseract.setTessVariable(
+                        "tessedit_char_whitelist",
+                        "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+                );
+
+                System.out.println(
+                        "Tesseract initialized OK."
+                );
+
+            } catch (Exception e) {
+
+                System.err.println(
+                        "Tesseract init failed: "
+                                + e.getMessage()
+                );
+
+                tesseract = null;
+            }
         }
 
-        try {
+        public boolean startCamera() {
 
-            tesseract = new Tesseract();
+            camera = new VideoCapture(0);
 
-            tesseract.setDatapath(TESSDATA_PATH);
+            cameraOpen = camera.isOpened();
 
-            tesseract.setLanguage("eng");
-
-            tesseract.setPageSegMode(7);
-
-            tesseract.setOcrEngineMode(1);
-
-            tesseract.setTessVariable(
-                    "tessedit_char_whitelist",
-                    "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
-            );
-
-            System.out.println(
-                    "Tesseract initialized OK."
-            );
-
-        } catch (Exception e) {
-
-            System.err.println(
-                    "Tesseract init failed: "
-                            + e.getMessage()
-            );
-
-            tesseract = null;
+            return cameraOpen;
         }
-    }
 
-    public boolean startCamera() {
+        public boolean isCameraOpen() {
 
-        camera = new VideoCapture(0);
+            return cameraOpen
+                    && camera != null
+                    && camera.isOpened();
+        }
 
-        cameraOpen = camera.isOpened();
+        public BufferedImage captureFrame() {
 
-        return cameraOpen;
-    }
+            if (!isCameraOpen()) {
+                return null;
+            }
 
-    public boolean isCameraOpen() {
+            Mat frame = new Mat();
 
-        return cameraOpen
-                && camera != null
-                && camera.isOpened();
-    }
+            if (!camera.read(frame) || frame.empty()) {
+                return null;
+            }
 
-    public BufferedImage captureFrame() {
+            frame.copyTo(lastRawFrame);
 
-        if (!isCameraOpen()) {
+            if (plateDetector != null) {
+
+                Mat gray = new Mat();
+
+                if (frame.channels() == 3) {
+
+                    Imgproc.cvtColor(
+                            frame,
+                            gray,
+                            Imgproc.COLOR_BGR2GRAY
+                    );
+
+                } else if (frame.channels() == 4) {
+
+                    Imgproc.cvtColor(
+                            frame,
+                            gray,
+                            Imgproc.COLOR_BGRA2GRAY
+                    );
+
+                } else {
+
+                    gray = frame.clone();
+                }
+
+                Imgproc.equalizeHist(
+                        gray,
+                        gray
+                );
+
+                MatOfRect plates =
+                        new MatOfRect();
+
+                plateDetector.detectMultiScale(
+                        gray,
+                        plates,
+                        1.08,
+                        5,
+                        0,
+                        new Size(80, 25),
+                        new Size(400, 120)
+                );
+
+                lastDetectedPlates =
+                        new ArrayList<>(
+                                List.of(plates.toArray())
+                        );
+
+                for (Rect r : lastDetectedPlates) {
+
+                    Imgproc.rectangle(
+                            frame,
+                            r,
+                            new Scalar(0, 255, 0),
+                            2
+                    );
+
+                    Imgproc.putText(
+                            frame,
+                            "PLATE DETECTED",
+                            new Point(r.x, r.y - 8),
+                            Imgproc.FONT_HERSHEY_SIMPLEX,
+                            0.55,
+                            new Scalar(0, 255, 0),
+                            2
+                    );
+                }
+            }
+
+            return matToBufferedImage(frame);
+        }
+
+        public String readPlateOCR() {
+
+            if (tesseract == null) {
+
+                System.err.println(
+                        "Tesseract not initialized."
+                );
+
+                return null;
+            }
+
+            if (lastRawFrame.empty()) {
+                return null;
+            }
+
+            if (lastDetectedPlates.isEmpty()) {
+
+                return runOCR(lastRawFrame);
+            }
+
+            for (Rect r : lastDetectedPlates) {
+
+                int pad = 6;
+
+                int x = Math.max(0, r.x - pad);
+
+                int y = Math.max(0, r.y - pad);
+
+                int w = Math.min(
+                        lastRawFrame.cols() - x,
+                        r.width + pad * 2
+                );
+
+                int h = Math.min(
+                        lastRawFrame.rows() - y,
+                        r.height + pad * 2
+                );
+
+                Mat crop =
+                        new Mat(
+                                lastRawFrame,
+                                new Rect(x, y, w, h)
+                        );
+
+                String result = runOCR(crop);
+
+                if (result != null &&
+                        result.length() >= 4) {
+
+                    return result;
+                }
+            }
+
             return null;
         }
 
-        Mat frame = new Mat();
+        private String runOCR(Mat input) {
 
-        if (!camera.read(frame) || frame.empty()) {
-            return null;
+            try {
+
+                Mat processed =
+                        preprocessForOCR(input);
+
+                BufferedImage img =
+                        matToBufferedImage(processed);
+
+                if (img == null) {
+                    return null;
+                }
+
+                String raw =
+                        tesseract.doOCR(img);
+
+                String cleaned =
+                        raw.toUpperCase()
+                                .replaceAll(
+                                        "[^A-Z0-9]",
+                                        ""
+                                )
+                                .trim();
+
+                System.out.println(
+                        "OCR raw=["
+                                + raw.trim()
+                                + "] cleaned=["
+                                + cleaned
+                                + "]"
+                );
+
+                return cleaned.length() >= 4
+                        ? cleaned
+                        : null;
+
+            } catch (Exception e) {
+
+                e.printStackTrace();
+
+                return null;
+            }
         }
 
-        frame.copyTo(lastRawFrame);
+        private Mat preprocessForOCR(Mat src) {
 
-        if (plateDetector != null) {
+            if (src == null || src.empty()) {
+                return new Mat();
+            }
+
+            Mat resized = new Mat();
+
+            Imgproc.resize(
+                    src,
+                    resized,
+                    new Size(
+                            src.width() * 3,
+                            src.height() * 3
+                    ),
+                    0,
+                    0,
+                    Imgproc.INTER_CUBIC
+            );
 
             Mat gray = new Mat();
 
-            Imgproc.cvtColor(
-                    frame,
+            if (resized.channels() == 3) {
+
+                Imgproc.cvtColor(
+                        resized,
+                        gray,
+                        Imgproc.COLOR_BGR2GRAY
+                );
+
+            } else if (resized.channels() == 4) {
+
+                Imgproc.cvtColor(
+                        resized,
+                        gray,
+                        Imgproc.COLOR_BGRA2GRAY
+                );
+
+            } else {
+
+                gray = resized.clone();
+            }
+
+            Imgproc.GaussianBlur(
                     gray,
-                    Imgproc.COLOR_BGR2GRAY
+                    gray,
+                    new Size(3, 3),
+                    0
             );
 
-            Imgproc.equalizeHist(
+            Imgproc.adaptiveThreshold(
                     gray,
-                    gray
+                    gray,
+                    255,
+                    Imgproc.ADAPTIVE_THRESH_GAUSSIAN_C,
+                    Imgproc.THRESH_BINARY,
+                    15,
+                    10
             );
 
-            MatOfRect plates =
-                    new MatOfRect();
-
-            plateDetector.detectMultiScale(
-                    gray,
-                    plates,
-                    1.08,
-                    5,
-                    0,
-                    new Size(80, 25),
-                    new Size(400, 120)
-            );
-
-            lastDetectedPlates =
-                    new ArrayList<>(
-                            List.of(plates.toArray())
+            Mat kernel =
+                    Imgproc.getStructuringElement(
+                            Imgproc.MORPH_RECT,
+                            new Size(2, 2)
                     );
+
+            Imgproc.morphologyEx(
+                    gray,
+                    gray,
+                    Imgproc.MORPH_DILATE,
+                    kernel
+            );
+
+            return gray;
+        }
+
+        public String saveSnapshot(String plateNumber) {
+
+            if (!isCameraOpen()) {
+                return null;
+            }
+
+            Mat frame = new Mat();
+
+            if (!camera.read(frame)
+                    || frame.empty()) {
+
+                return null;
+            }
 
             for (Rect r : lastDetectedPlates) {
 
@@ -212,343 +444,128 @@ public class CameraCapture {
                         new Scalar(0, 255, 0),
                         2
                 );
-
-                Imgproc.putText(
-                        frame,
-                        "PLATE DETECTED",
-                        new Point(r.x, r.y - 8),
-                        Imgproc.FONT_HERSHEY_SIMPLEX,
-                        0.55,
-                        new Scalar(0, 255, 0),
-                        2
-                );
             }
-        }
 
-        try {
+            String dir =
+                    "captured_violations";
 
-            return matToBufferedImage(frame);
+            new File(dir).mkdirs();
 
-        } catch (Exception e) {
+            String ts =
+                    new SimpleDateFormat(
+                            "yyyyMMdd_HHmmss"
+                    ).format(new Date());
 
-            e.printStackTrace();
-
-            return null;
-        }
-    }
-
-    public String readPlateOCR() {
-
-        if (tesseract == null) {
-
-            System.err.println(
-                    "Tesseract not initialized."
-            );
-
-            return null;
-        }
-
-        if (lastRawFrame.empty()) {
-            return null;
-        }
-
-        if (lastDetectedPlates.isEmpty()) {
-            return runOCR(lastRawFrame);
-        }
-
-        for (Rect r : lastDetectedPlates) {
-
-            int pad = 6;
-
-            int x = Math.max(0, r.x - pad);
-
-            int y = Math.max(0, r.y - pad);
-
-            int w = Math.min(
-                    lastRawFrame.cols() - x,
-                    r.width + pad * 2
-            );
-
-            int h = Math.min(
-                    lastRawFrame.rows() - y,
-                    r.height + pad * 2
-            );
-
-            Mat crop =
-                    new Mat(
-                            lastRawFrame,
-                            new Rect(x, y, w, h)
+            String safe =
+                    plateNumber.replaceAll(
+                            "[^A-Z0-9]",
+                            ""
                     );
 
-            String result = runOCR(crop);
+            String path =
+                    dir
+                            + File.separator
+                            + "VIO_"
+                            + ts
+                            + "_"
+                            + safe
+                            + ".jpg";
 
-            if (result != null &&
-                    result.length() >= 4) {
+            Imgcodecs.imwrite(
+                    path,
+                    frame
+            );
 
-                return result;
+            System.out.println(
+                    "Snapshot saved: "
+                            + path
+            );
+
+            return path;
+        }
+
+        public void stopCamera() {
+
+            if (camera != null) {
+
+                camera.release();
+
+                cameraOpen = false;
             }
         }
 
-        return null;
-    }
+        public boolean hasPlateDetected() {
 
-    private String runOCR(Mat input) {
-
-        Mat processed =
-                preprocessForOCR(input);
-
-        BufferedImage img =
-                matToBufferedImage(processed);
-
-        try {
-
-            String raw =
-                    tesseract.doOCR(img);
-
-            String cleaned =
-                    raw.toUpperCase()
-                            .replaceAll(
-                                    "[^A-Z0-9]",
-                                    ""
-                            )
-                            .trim();
-
-            System.out.println(
-                    "OCR raw=["
-                            + raw.trim()
-                            + "] cleaned=["
-                            + cleaned
-                            + "]"
-            );
-
-            return cleaned.length() >= 4
-                    ? cleaned
-                    : null;
-
-        } catch (TesseractException e) {
-
-            System.err.println(
-                    "OCR failed: "
-                            + e.getMessage()
-            );
-
-            return null;
-        }
-    }
-
-    private Mat preprocessForOCR(Mat src) {
-
-        Mat result = new Mat();
-
-        Imgproc.resize(
-                src,
-                result,
-                new Size(
-                        src.width() * 3,
-                        src.height() * 3
-                ),
-                0,
-                0,
-                Imgproc.INTER_CUBIC
-        );
-
-        if (result.channels() > 1) {
-
-            Imgproc.cvtColor(
-                    result,
-                    result,
-                    Imgproc.COLOR_BGR2GRAY
-            );
+            return !lastDetectedPlates.isEmpty();
         }
 
-        Imgproc.GaussianBlur(
-                result,
-                result,
-                new Size(3, 3),
-                0
-        );
+        public static BufferedImage matToBufferedImage(Mat mat) {
 
-        Imgproc.adaptiveThreshold(
-                result,
-                result,
-                255,
-                Imgproc.ADAPTIVE_THRESH_GAUSSIAN_C,
-                Imgproc.THRESH_BINARY,
-                15,
-                10
-        );
+            if (mat == null || mat.empty()) {
+                return null;
+            }
 
-        Mat kernel =
-                Imgproc.getStructuringElement(
-                        Imgproc.MORPH_RECT,
-                        new Size(2, 2)
+            int width = mat.width();
+
+            int height = mat.height();
+
+            int channels = mat.channels();
+
+            BufferedImage image;
+
+            byte[] sourcePixels =
+                    new byte[
+                            width
+                                    * height
+                                    * channels
+                            ];
+
+            mat.get(
+                    0,
+                    0,
+                    sourcePixels
+            );
+
+            if (channels == 1) {
+
+                image = new BufferedImage(
+                        width,
+                        height,
+                        BufferedImage.TYPE_BYTE_GRAY
                 );
 
-        Imgproc.morphologyEx(
-                result,
-                result,
-                Imgproc.MORPH_DILATE,
-                kernel
-        );
+            } else if (channels == 3) {
 
-        return result;
-    }
-
-    public String saveSnapshot(String plateNumber) {
-
-        if (!isCameraOpen()) {
-            return null;
-        }
-
-        Mat frame = new Mat();
-
-        if (!camera.read(frame)
-                || frame.empty()) {
-
-            return null;
-        }
-
-        for (Rect r : lastDetectedPlates) {
-
-            Imgproc.rectangle(
-                    frame,
-                    r,
-                    new Scalar(0, 255, 0),
-                    2
-            );
-        }
-
-        String dir =
-                "captured_violations";
-
-        new File(dir).mkdirs();
-
-        String ts =
-                new SimpleDateFormat(
-                        "yyyyMMdd_HHmmss"
-                ).format(new Date());
-
-        String safe =
-                plateNumber.replaceAll(
-                        "[^A-Z0-9]",
-                        ""
-                );
-
-        String path =
-                dir
-                        + File.separator
-                        + "VIO_"
-                        + ts
-                        + "_"
-                        + safe
-                        + ".jpg";
-
-        Imgcodecs.imwrite(
-                path,
-                frame
-        );
-
-        System.out.println(
-                "Snapshot saved: "
-                        + path
-        );
-
-        return path;
-    }
-
-    public void stopCamera() {
-
-        if (camera != null) {
-
-            camera.release();
-
-            cameraOpen = false;
-        }
-    }
-
-    public boolean hasPlateDetected() {
-
-        return !lastDetectedPlates.isEmpty();
-    }
-
-    public static BufferedImage matToBufferedImage(Mat mat) {
-
-        if (mat == null || mat.empty()) {
-            return null;
-        }
-
-        Mat converted = new Mat();
-
-        if (mat.channels() == 1) {
-
-            Imgproc.cvtColor(
-                    mat,
-                    converted,
-                    Imgproc.COLOR_GRAY2BGR
-            );
-
-        } else if (mat.channels() == 3) {
-
-            converted = mat.clone();
-
-        } else if (mat.channels() == 4) {
-
-            Imgproc.cvtColor(
-                    mat,
-                    converted,
-                    Imgproc.COLOR_BGRA2BGR
-            );
-
-        } else {
-
-            System.out.println(
-                    "Unsupported channels: "
-                            + mat.channels()
-            );
-
-            return null;
-        }
-
-        int width = converted.width();
-
-        int height = converted.height();
-
-        int channels = converted.channels();
-
-        byte[] sourcePixels =
-                new byte[
-                        width
-                                * height
-                                * channels
-                        ];
-
-        converted.get(
-                0,
-                0,
-                sourcePixels
-        );
-
-        BufferedImage image =
-                new BufferedImage(
+                image = new BufferedImage(
                         width,
                         height,
                         BufferedImage.TYPE_3BYTE_BGR
                 );
 
-        byte[] targetPixels =
-                ((DataBufferByte)
-                        image.getRaster()
-                                .getDataBuffer())
-                        .getData();
+            } else {
 
-        System.arraycopy(
-                sourcePixels,
-                0,
-                targetPixels,
-                0,
-                sourcePixels.length
-        );
+                System.out.println(
+                        "Unsupported channel count: "
+                                + channels
+                );
 
-        return image;
+                return null;
+            }
+
+            byte[] targetPixels =
+                    ((DataBufferByte)
+                            image.getRaster()
+                                    .getDataBuffer())
+                            .getData();
+
+            System.arraycopy(
+                    sourcePixels,
+                    0,
+                    targetPixels,
+                    0,
+                    sourcePixels.length
+            );
+
+            return image;
+        }
     }
-}
